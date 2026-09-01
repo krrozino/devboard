@@ -1,18 +1,29 @@
-# First GitHub push
+# Local development setup
 
-Create an empty repository named `devboard` on GitHub, then run from this folder:
+Clone the repository and install dependencies:
 
 ```bash
-git init
-git add .
-git commit -m "chore: bootstrap DevBoard foundation"
-git branch -M main
-git remote add origin <YOUR_REPOSITORY_URL>
-git push -u origin main
+git clone https://github.com/krrozino/devboard.git
+cd devboard
+npm install
 ```
 
-After the repository exists, create the first development branch:
+Create the local environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+Configure `DATABASE_URL`, then start the application:
+
+```bash
+npm run dev
+```
+
+For the next milestone, create a development branch:
 
 ```bash
 git checkout -b feat/github-identity
 ```
+
+After the first local `npm install`, commit the generated `package-lock.json` and switch CI back from `npm install` to `npm ci`.
