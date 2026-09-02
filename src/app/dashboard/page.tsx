@@ -249,6 +249,28 @@ export default async function DashboardPage() {
 
                 <div className="health-reasons">
                   <div className="health-reasons-heading">
+                    <strong>{locale === "pt-BR" ? "Tendência recente" : "Recent trend"}</strong>
+                    <span>
+                      {locale === "pt-BR"
+                        ? `${health.trend.length} snapshot${health.trend.length === 1 ? "" : "s"}`
+                        : `${health.trend.length} snapshot${health.trend.length === 1 ? "" : "s"}`}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {health.trend.map((point, index) => (
+                      <span
+                        className="status-pill"
+                        key={`${point.createdAt.toISOString()}:${index}`}
+                        title={formatDateTime(locale, point.createdAt)}
+                      >
+                        {point.score} · {healthStatusLabel(locale, point.status)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="health-reasons" style={{ borderTop: "1px solid var(--border)" }}>
+                  <div className="health-reasons-heading">
                     <strong>{locale === "pt-BR" ? "Por quê?" : "Why?"}</strong>
                     <span>
                       {health.reasons.length === 0
@@ -269,6 +291,22 @@ export default async function DashboardPage() {
                           <div>
                             <strong>{dimensionLabel(locale, reason.dimension)}</strong>
                             <p>{localizeAttentionMessage(locale, reason.message)}</p>
+                            {reason.url ? (
+                              <a
+                                href={reason.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  display: "inline-block",
+                                  marginTop: 8,
+                                  color: "var(--accent)",
+                                  fontSize: 12,
+                                  textDecoration: "none",
+                                }}
+                              >
+                                {locale === "pt-BR" ? "Abrir sinal no GitHub →" : "Open signal on GitHub →"}
+                              </a>
+                            ) : null}
                           </div>
                         </div>
                       ))}
