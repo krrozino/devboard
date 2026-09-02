@@ -1,4 +1,5 @@
-import { isCronRequestAuthorized, runScheduledAttentionEvaluation } from "@/modules/attention/scheduled";
+import { isCronRequestAuthorized } from "@/modules/attention/cron-auth";
+import { runScheduledAttentionEvaluation } from "@/modules/attention/scheduled";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
