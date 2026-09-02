@@ -1,0 +1,42 @@
+name: Generate Database Foundation
+
+on:
+  push:
+    branches:
+      - chore/database-foundation
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate Drizzle migration
+        run: npm run db:generate
+        env:
+          DATABASE_URL: postgresql://devboard:devboard@localhost:5432/devboard
+
+      - name: Commit generated foundation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json drizzle/
+          if git diff --cached --quiet; then
+            echo "No generated changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(db): generate initial migration and lockfile"
+          git push
