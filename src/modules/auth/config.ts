@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const PRODUCTION_APP_URL = "https://devboard-phi-six.vercel.app";
-export const DEFAULT_GITHUB_CLIENT_ID = "Ov23liGf80rPbydhXwFE";
+export const DEFAULT_GITHUB_CLIENT_ID = "Ov23liGf8OrPbydhXwFE";
 
 const authEnvSchema = z.object({
   GITHUB_CLIENT_SECRET: z.string().min(1),
