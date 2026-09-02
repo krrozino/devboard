@@ -13,6 +13,7 @@ export async function GET() {
         to_regclass('public.repositories') as repositories_table,
         to_regclass('public.attention_items') as attention_items_table,
         to_regclass('public.health_snapshots') as health_snapshots_table,
+        to_regclass('public.health_reasons') as health_reasons_table,
         to_regclass('public.github_app_configurations') as github_app_configurations_table,
         to_regclass('public.github_installations') as github_installations_table,
         to_regclass('public.github_issues') as github_issues_table,
@@ -29,6 +30,7 @@ export async function GET() {
         row?.repositories_table &&
         row?.attention_items_table &&
         row?.health_snapshots_table &&
+        row?.health_reasons_table &&
         row?.github_app_configurations_table &&
         row?.github_installations_table &&
         row?.github_issues_table &&
