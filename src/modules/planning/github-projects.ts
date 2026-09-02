@@ -14,27 +14,31 @@ export type GithubProjectSummary = {
   updated_at?: string;
 };
 
+type SingleSelectProjectField = {
+  __typename: "ProjectV2SingleSelectField";
+  id: string;
+  name: string;
+  options: Array<{ id: string; name: string; color: string }>;
+};
+
+type IterationProjectField = {
+  __typename: "ProjectV2IterationField";
+  id: string;
+  name: string;
+  configuration: {
+    iterations: Array<{ id: string; title: string; startDate: string; duration: number }>;
+    completedIterations: Array<{
+      id: string;
+      title: string;
+      startDate: string;
+      duration: number;
+    }>;
+  };
+};
+
 type ProjectField =
-  | {
-      __typename: "ProjectV2SingleSelectField";
-      id: string;
-      name: string;
-      options: Array<{ id: string; name: string; color: string }>;
-    }
-  | {
-      __typename: "ProjectV2IterationField";
-      id: string;
-      name: string;
-      configuration: {
-        iterations: Array<{ id: string; title: string; startDate: string; duration: number }>;
-        completedIterations: Array<{
-          id: string;
-          title: string;
-          startDate: string;
-          duration: number;
-        }>;
-      };
-    }
+  | SingleSelectProjectField
+  | IterationProjectField
   | { __typename: string; id?: string; name?: string };
 
 type ProjectContent =
@@ -52,21 +56,25 @@ type ProjectContent =
   | { __typename: "DraftIssue"; id: string; title: string }
   | null;
 
+type SingleSelectFieldValue = {
+  __typename: "ProjectV2ItemFieldSingleSelectValue";
+  name: string | null;
+  optionId: string | null;
+  field: { id: string; name: string } | null;
+};
+
+type IterationFieldValue = {
+  __typename: "ProjectV2ItemFieldIterationValue";
+  iterationId: string;
+  title: string;
+  startDate: string;
+  duration: number;
+  field: { id: string; name: string } | null;
+};
+
 type ProjectFieldValue =
-  | {
-      __typename: "ProjectV2ItemFieldSingleSelectValue";
-      name: string | null;
-      optionId: string | null;
-      field: { id: string; name: string } | null;
-    }
-  | {
-      __typename: "ProjectV2ItemFieldIterationValue";
-      iterationId: string;
-      title: string;
-      startDate: string;
-      duration: number;
-      field: { id: string; name: string } | null;
-    }
+  | SingleSelectFieldValue
+  | IterationFieldValue
   | { __typename: string };
 
 type ProjectItemNode = {
@@ -127,6 +135,22 @@ export type PlanningBoard = {
   sprintCards: PlanningCard[];
   backlogCards: PlanningCard[];
 };
+
+function isSingleSelectProjectField(field: ProjectField): field is SingleSelectProjectField {
+  return field.__typename === "ProjectV2SingleSelectField" && "options" in field;
+}
+
+function isIterationProjectField(field: ProjectField): field is IterationProjectField {
+  return field.__typename === "ProjectV2IterationField" && "configuration" in field;
+}
+
+function isSingleSelectFieldValue(value: ProjectFieldValue): value is SingleSelectFieldValue {
+  return value.__typename === "ProjectV2ItemFieldSingleSelectValue" && "field" in value;
+}
+
+function isIterationFieldValue(value: ProjectFieldValue): value is IterationFieldValue {
+  return value.__typename === "ProjectV2ItemFieldIterationValue" && "field" in value;
+}
 
 function githubHeaders(accessToken: string) {
   return {
@@ -195,10 +219,7 @@ function addDays(dateString: string, days: number) {
 }
 
 function findCurrentIteration(fields: ProjectField[], now = new Date()) {
-  const iterationField = fields.find(
-    (field): field is Extract<ProjectField, { __typename: "ProjectV2IterationField" }> =>
-      field.__typename === "ProjectV2IterationField",
-  );
+  const iterationField = fields.find(isIterationProjectField);
   if (!iterationField) return null;
 
   const today = now.toISOString().slice(0, 10);
@@ -227,13 +248,13 @@ function normalizeCard(
   if (item.isArchived || !item.content) return null;
 
   const statusValue = item.fieldValues.nodes.find(
-    (value): value is Extract<ProjectFieldValue, { __typename: "ProjectV2ItemFieldSingleSelectValue" }> =>
-      value.__typename === "ProjectV2ItemFieldSingleSelectValue" &&
+    (value): value is SingleSelectFieldValue =>
+      isSingleSelectFieldValue(value) &&
       Boolean(value.field && value.field.id === statusFieldId),
   );
   const iterationValue = item.fieldValues.nodes.find(
-    (value): value is Extract<ProjectFieldValue, { __typename: "ProjectV2ItemFieldIterationValue" }> =>
-      value.__typename === "ProjectV2ItemFieldIterationValue" &&
+    (value): value is IterationFieldValue =>
+      isIterationFieldValue(value) &&
       Boolean(value.field && value.field.id === iterationFieldId),
   );
 
@@ -357,13 +378,10 @@ export async function getUserPlanningBoard(
   if (!project) throw new Error("Selected GitHub Project was not found");
 
   const statusField = project.fields.nodes.find(
-    (field): field is Extract<ProjectField, { __typename: "ProjectV2SingleSelectField" }> =>
-      field.__typename === "ProjectV2SingleSelectField" && field.name.toLowerCase() === "status",
+    (field): field is SingleSelectProjectField =>
+      isSingleSelectProjectField(field) && field.name.toLowerCase() === "status",
   );
-  const iterationField = project.fields.nodes.find(
-    (field): field is Extract<ProjectField, { __typename: "ProjectV2IterationField" }> =>
-      field.__typename === "ProjectV2IterationField",
-  );
+  const iterationField = project.fields.nodes.find(isIterationProjectField);
   const currentIteration = findCurrentIteration(project.fields.nodes);
 
   const cards = project.items.nodes
