@@ -20,6 +20,7 @@ import {
   listRepositoryWorkflowRuns,
   type GithubReviewResource,
 } from "@/modules/github/resources-api";
+import { recalculateProjectHealth } from "@/modules/health/engine";
 
 async function loadReviews(
   token: string,
@@ -53,6 +54,7 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
   const [connection] = await db
     .select({
       repositoryId: repositories.id,
+      projectId: repositories.projectId,
       owner: repositories.owner,
       name: repositories.name,
       installationId: githubInstallations.githubInstallationId,
@@ -209,6 +211,7 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
   });
 
   const attention = await evaluateRepositoryAttention(connection.repositoryId, now);
+  const health = await recalculateProjectHealth(connection.projectId, now);
 
   return {
     issues: issues.length,
@@ -216,6 +219,7 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
     reviews: reviewCount,
     workflowRuns: workflowRuns.length,
     attention: attention.active,
+    health: health.overallScore,
     syncedAt: now,
   };
 }
