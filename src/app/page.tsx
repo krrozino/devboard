@@ -1,13 +1,15 @@
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import { getCurrentUser } from "@/modules/auth/current-user";
-
-const signals = [
-  { label: "Project health", value: "--", caption: "Connect a repository to calculate" },
-  { label: "Needs attention", value: "--", caption: "No repository connected" },
-  { label: "Recent activity", value: "--", caption: "Waiting for real events" },
-];
+import { getLocale, getMessages } from "@/modules/i18n";
 
 export default async function Home() {
-  const user = await getCurrentUser();
+  const [user, locale] = await Promise.all([getCurrentUser(), getLocale()]);
+  const t = getMessages(locale);
+  const signals = [
+    { label: t.projectHealth, value: "--", caption: t.connectRepoCalculate },
+    { label: t.needsAttention, value: "--", caption: t.noRepositoryConnected },
+    { label: t.recentActivity, value: "--", caption: t.waitingRealEvents },
+  ];
 
   return (
     <main className="shell">
@@ -16,27 +18,23 @@ export default async function Home() {
           <span className="brand-mark">D</span>
           <span>DevBoard</span>
         </div>
-        <span className="status-pill">
-          {user ? `Signed in as @${user.username}` : "Private alpha"}
-        </span>
+        <div className="account-actions">
+          <LocaleSwitcher locale={locale} returnTo="/" />
+          <span className="status-pill">
+            {user ? t.signedInAs(user.username) : t.privateAlpha}
+          </span>
+        </div>
       </nav>
 
       <section className="hero">
-        <p className="eyebrow">SOFTWARE PROJECT OBSERVABILITY</p>
-        <h1>Know how your software is moving.</h1>
-        <p className="hero-copy">
-          GitHub tracks the work. DevBoard turns project activity into health,
-          attention signals and context you can understand in seconds.
-        </p>
+        <p className="eyebrow">{t.eyebrowHome}</p>
+        <h1>{t.homeTitle}</h1>
+        <p className="hero-copy">{t.homeCopy}</p>
         <div className="hero-actions">
           <a className="primary" href={user ? "/dashboard" : "/api/auth/github"}>
-            {user ? "Open dashboard" : "Continue with GitHub"}
+            {user ? t.openDashboard : t.continueGithub}
           </a>
-          <span>
-            {user
-              ? "Your GitHub identity is connected."
-              : "Read-only identity access for the first MVP."}
-          </span>
+          <span>{user ? t.identityConnected : t.readonlyIdentity}</span>
         </div>
       </section>
 
@@ -52,13 +50,10 @@ export default async function Home() {
 
       <section className="principle">
         <div>
-          <p className="eyebrow">PRODUCT PRINCIPLE</p>
-          <h2>What needs your attention?</h2>
+          <p className="eyebrow">{t.productPrinciple}</p>
+          <h2>{t.whatNeedsAttention}</h2>
         </div>
-        <p>
-          DevBoard does not replace GitHub Projects. It observes the development
-          flow, detects signals that matter, and explains how they affect project health.
-        </p>
+        <p>{t.principleCopy}</p>
       </section>
     </main>
   );
