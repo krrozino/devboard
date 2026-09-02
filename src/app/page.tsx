@@ -1,10 +1,14 @@
+import { getCurrentUser } from "@/modules/auth/current-user";
+
 const signals = [
-  { label: "Project health", value: "--", caption: "Connect GitHub to calculate" },
+  { label: "Project health", value: "--", caption: "Connect a repository to calculate" },
   { label: "Needs attention", value: "--", caption: "No repository connected" },
   { label: "Recent activity", value: "--", caption: "Waiting for real events" },
 ];
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentUser();
+
   return (
     <main className="shell">
       <nav className="topbar">
@@ -12,7 +16,9 @@ export default function Home() {
           <span className="brand-mark">D</span>
           <span>DevBoard</span>
         </div>
-        <span className="status-pill">Development preview</span>
+        <span className="status-pill">
+          {user ? `Signed in as @${user.username}` : "Private alpha"}
+        </span>
       </nav>
 
       <section className="hero">
@@ -23,10 +29,14 @@ export default function Home() {
           attention signals and context you can understand in seconds.
         </p>
         <div className="hero-actions">
-          <button className="primary" type="button" disabled>
-            Connect GitHub
-          </button>
-          <span>GitHub integration arrives in Sprint 1.</span>
+          <a className="primary" href={user ? "/dashboard" : "/api/auth/github"}>
+            {user ? "Open dashboard" : "Continue with GitHub"}
+          </a>
+          <span>
+            {user
+              ? "Your GitHub identity is connected."
+              : "Read-only identity access for the first MVP."}
+          </span>
         </div>
       </section>
 
