@@ -16,9 +16,16 @@ import {
 
 const RULE_IDS = ["PR_WAITING_REVIEW", "STALE_ISSUE", "WORKFLOW_FAILED"] as const;
 
-export async function evaluateRepositoryAttention(repositoryId: string, now = new Date()) {
+export async function evaluateRepositoryAttention(
+  repositoryId: string,
+  now = new Date(),
+  relevantWorkflowBranches?: Iterable<string>,
+) {
   const [repository] = await db
-    .select({ projectId: repositories.projectId })
+    .select({
+      projectId: repositories.projectId,
+      defaultBranch: repositories.defaultBranch,
+    })
     .from(repositories)
     .where(eq(repositories.id, repositoryId))
     .limit(1);
@@ -71,7 +78,13 @@ export async function evaluateRepositoryAttention(repositoryId: string, now = ne
     if (finding) findings.push(finding);
   }
 
-  findings.push(...evaluateWorkflows({ repositoryId, runs: workflowRuns }));
+  findings.push(
+    ...evaluateWorkflows({
+      repositoryId,
+      runs: workflowRuns,
+      relevantBranches: relevantWorkflowBranches ?? [repository.defaultBranch],
+    }),
+  );
 
   const desiredKeys = new Set(
     findings.map((finding) => `${finding.ruleId}:${finding.resourceType}:${finding.resourceId}`),
