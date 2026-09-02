@@ -7,6 +7,7 @@ const serverEnvSchema = z.object({
   GITHUB_APP_ID: z.string().optional(),
   GITHUB_PRIVATE_KEY: z.string().optional(),
   GITHUB_WEBHOOK_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().min(16).optional(),
 });
 
 export function getServerEnv() {
