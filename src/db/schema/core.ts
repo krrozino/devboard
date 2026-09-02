@@ -1,12 +1,12 @@
 import {
   index,
+  integer,
   pgEnum,
   pgTable,
   text,
   timestamp,
   uniqueIndex,
   uuid,
-  integer,
 } from "drizzle-orm/pg-core";
 
 export const projectStatusEnum = pgEnum("project_status", ["ACTIVE", "PAUSED", "ARCHIVED"]);
@@ -19,6 +19,11 @@ export const attentionSeverityEnum = pgEnum("attention_severity", [
 ]);
 export const attentionStatusEnum = pgEnum("attention_status", ["ACTIVE", "RESOLVED"]);
 export const healthStatusEnum = pgEnum("health_status", ["HEALTHY", "ATTENTION", "AT_RISK"]);
+export const githubInstallationStatusEnum = pgEnum("github_installation_status", [
+  "ACTIVE",
+  "SUSPENDED",
+  "REMOVED",
+]);
 
 export const users = pgTable(
   "users",
@@ -33,6 +38,47 @@ export const users = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [uniqueIndex("users_github_id_uidx").on(table.githubId)],
+);
+
+export const githubAppConfigurations = pgTable(
+  "github_app_configurations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    singletonKey: text("singleton_key").default("primary").notNull(),
+    githubAppId: text("github_app_id").notNull(),
+    slug: text("slug").notNull(),
+    clientId: text("client_id").notNull(),
+    privateKeyEncrypted: text("private_key_encrypted").notNull(),
+    webhookSecretEncrypted: text("webhook_secret_encrypted").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("github_app_config_singleton_uidx").on(table.singletonKey),
+    uniqueIndex("github_app_config_app_id_uidx").on(table.githubAppId),
+  ],
+);
+
+export const githubInstallations = pgTable(
+  "github_installations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    appConfigurationId: uuid("app_configuration_id")
+      .notNull()
+      .references(() => githubAppConfigurations.id, { onDelete: "cascade" }),
+    githubInstallationId: text("github_installation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    accountLogin: text("account_login").notNull(),
+    accountType: text("account_type").notNull(),
+    status: githubInstallationStatusEnum("status").default("ACTIVE").notNull(),
+    installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("github_installations_external_id_uidx").on(table.githubInstallationId),
+    index("github_installations_user_id_idx").on(table.userId),
+  ],
 );
 
 export const projects = pgTable(
@@ -54,6 +100,9 @@ export const repositories = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     projectId: uuid("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    installationId: uuid("installation_id").references(() => githubInstallations.id, {
+      onDelete: "set null",
+    }),
     githubRepositoryId: text("github_repository_id").notNull(),
     owner: text("owner").notNull(),
     name: text("name").notNull(),
@@ -65,6 +114,7 @@ export const repositories = pgTable(
   (table) => [
     uniqueIndex("repositories_github_repository_id_uidx").on(table.githubRepositoryId),
     index("repositories_project_id_idx").on(table.projectId),
+    index("repositories_installation_id_idx").on(table.installationId),
   ],
 );
 
