@@ -1,5 +1,6 @@
 import { and, count, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { LocaleSwitcher } from "@/components/locale-switcher";
 import { db } from "@/db";
 import {
   attentionItems,
@@ -11,10 +12,19 @@ import {
   repositories,
 } from "@/db/schema";
 import { getCurrentUser } from "@/modules/auth/current-user";
+import {
+  formatDateTime,
+  getLocale,
+  getMessages,
+  localizeAttentionMessage,
+  severityLabel,
+  visibilityLabel,
+} from "@/modules/i18n";
 
 export default async function DashboardPage() {
-  const user = await getCurrentUser();
+  const [user, locale] = await Promise.all([getCurrentUser(), getLocale()]);
   if (!user) redirect("/");
+  const t = getMessages(locale);
 
   const [appConfiguration] = await db
     .select({ id: githubAppConfigurations.id, slug: githubAppConfigurations.slug })
@@ -85,113 +95,126 @@ export default async function DashboardPage() {
           <span>DevBoard</span>
         </div>
         <div className="account-actions">
+          <LocaleSwitcher locale={locale} returnTo="/dashboard" />
           <span className="status-pill">@{user.username}</span>
           <form action="/api/auth/logout" method="post">
             <button className="secondary" type="submit">
-              Sign out
+              {t.signOut}
             </button>
           </form>
         </div>
       </nav>
 
       <section className="hero dashboard-hero">
-        <p className="eyebrow">GITHUB CONNECTION ACTIVE</p>
-        <h1>Welcome, {user.name ?? user.username}.</h1>
+        <p className="eyebrow">{t.githubConnectionActive}</p>
+        <h1>{t.welcome(user.name ?? user.username)}</h1>
         <p className="hero-copy">
           {hasSyncedData
-            ? "DevBoard is reading normalized engineering signals and converting them into deterministic attention."
+            ? t.syncedHero
             : repositoryCount > 0
-              ? "Your first repository is connected. Run the initial sync to import pull requests, issues, reviews and workflows."
-              : "Your DevBoard account is linked to GitHub. Connect the DevBoard GitHub App to start observing real repositories."}
+              ? t.repoConnectedHero
+              : t.githubLinkedHero}
         </p>
         <div className="hero-actions">
           {appConfiguration ? (
             <a className="primary" href="/api/github/app/install">
-              Connect repositories
+              {t.connectRepositories}
             </a>
           ) : (
             <a className="primary" href="/api/github/app/manifest">
-              Create DevBoard GitHub App
+              {t.createGithubApp}
             </a>
           )}
-          <span>
-            {appConfiguration
-              ? `GitHub App: ${appConfiguration.slug}`
-              : "One-time bootstrap. Permissions are preconfigured."}
-          </span>
+          <span>{appConfiguration ? t.githubApp(appConfiguration.slug) : t.bootstrapHint}</span>
         </div>
       </section>
 
-      <section className="signal-grid" aria-label="DevBoard repository signals">
+      <section
+        className="signal-grid"
+        aria-label={locale === "pt-BR" ? "Sinais dos repositórios" : "Repository signals"}
+      >
         <article className="signal-card">
-          <span>Repositories</span>
+          <span>{t.repositories}</span>
           <strong>{repositoryCount}</strong>
-          <p>{repositoryCount > 0 ? "Observed by DevBoard" : "No repository connected yet"}</p>
+          <p>{repositoryCount > 0 ? t.observedByDevboard : t.noRepoYet}</p>
         </article>
         <article className="signal-card">
-          <span>Pull requests</span>
+          <span>{t.pullRequests}</span>
           <strong>{pullRequestCount}</strong>
-          <p>{hasSyncedData ? "Normalized from GitHub" : "Waiting for initial sync"}</p>
+          <p>{hasSyncedData ? t.normalizedFromGithub : t.waitingInitialSync}</p>
         </article>
         <article className="signal-card">
-          <span>Needs attention</span>
+          <span>{t.needsAttention}</span>
           <strong>{hasSyncedData ? attentionCount : "--"}</strong>
           <p>
             {hasSyncedData
-              ? `${issueCount} issues · ${workflowRunCount} workflow runs observed`
-              : "Waiting for initial sync"}
+              ? t.observedIssuesWorkflows(issueCount, workflowRunCount)
+              : t.waitingInitialSync}
           </p>
         </article>
       </section>
 
       <section className="principle">
         <div>
-          <p className="eyebrow">{hasSyncedData ? "ATTENTION ENGINE" : "INITIAL SYNC"}</p>
-          <h2>{hasSyncedData ? "Know what needs attention." : "Import real engineering signals."}</h2>
+          <p className="eyebrow">{hasSyncedData ? t.attentionEngine : t.initialSync}</p>
+          <h2>{hasSyncedData ? t.knowAttention : t.importSignals}</h2>
         </div>
-        <p>
-          {hasSyncedData
-            ? "DevBoard currently evaluates explainable rules for pull requests waiting on review, stale issues and failed workflows."
-            : "Sync uses a short-lived GitHub App installation token. DevBoard never stores that token in PostgreSQL."}
-        </p>
+        <p>{hasSyncedData ? t.attentionRulesCopy : t.tokenCopy}</p>
       </section>
 
       {hasSyncedData ? (
-        <section className="repository-list" aria-label="Active attention items">
+        <section
+          className="repository-list"
+          aria-label={locale === "pt-BR" ? "Itens ativos de atenção" : "Active attention items"}
+        >
           {activeAttention.length > 0 ? (
             activeAttention.map((item) => (
               <article className="signal-card" key={item.id}>
-                <span>{item.severity} · {item.owner}/{item.name}</span>
-                <strong className="signal-word">{item.message}</strong>
-                <p>Detected: {item.detectedAt.toISOString()}</p>
+                <span>
+                  {severityLabel(locale, item.severity)} · {item.owner}/{item.name}
+                </span>
+                <strong className="signal-word">
+                  {localizeAttentionMessage(locale, item.message)}
+                </strong>
+                <p>
+                  {t.detected}: {formatDateTime(locale, item.detectedAt)}
+                </p>
               </article>
             ))
           ) : (
             <article className="signal-card">
-              <span>Attention</span>
-              <strong className="signal-word">No active signals.</strong>
-              <p>The current deterministic rules did not find anything requiring attention.</p>
+              <span>{t.attention}</span>
+              <strong className="signal-word">{t.noActiveSignals}</strong>
+              <p>{t.noActiveSignalsCopy}</p>
             </article>
           )}
         </section>
       ) : null}
 
       {connectedRepositories.length > 0 ? (
-        <section className="repository-list" aria-label="Connected repositories">
+        <section
+          className="repository-list"
+          aria-label={locale === "pt-BR" ? "Repositórios conectados" : "Connected repositories"}
+        >
           {connectedRepositories.map((repository) => (
             <article className="signal-card" key={repository.id}>
-              <span>{repository.visibility}</span>
+              <span>{visibilityLabel(locale, repository.visibility)}</span>
               <strong className="signal-word">
                 {repository.owner}/{repository.name}
               </strong>
-              <p>Default branch: {repository.defaultBranch}</p>
               <p>
-                Last sync: {repository.lastSyncedAt ? repository.lastSyncedAt.toISOString() : "never"}
+                {t.defaultBranch}: {repository.defaultBranch}
+              </p>
+              <p>
+                {t.lastSync}:{" "}
+                {repository.lastSyncedAt
+                  ? formatDateTime(locale, repository.lastSyncedAt)
+                  : t.never}
               </p>
               <form action="/api/github/sync" method="post">
                 <input name="repositoryId" type="hidden" value={repository.id} />
                 <button className="secondary" type="submit">
-                  {repository.lastSyncedAt ? "Sync again" : "Sync now"}
+                  {repository.lastSyncedAt ? t.syncAgain : t.syncNow}
                 </button>
               </form>
             </article>
