@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { HelpDock } from "@/components/help-dock";
 import { getLocale } from "@/modules/i18n";
 import "./globals.css";
 
@@ -14,7 +15,10 @@ export default async function RootLayout({
 
   return (
     <html lang={locale}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <HelpDock locale={locale} />
+      </body>
     </html>
   );
 }
