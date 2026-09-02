@@ -12,6 +12,7 @@ import {
   repositories,
 } from "@/db/schema";
 import { getCurrentUser } from "@/modules/auth/current-user";
+import { listLatestProjectHealth } from "@/modules/health/dashboard";
 import {
   formatDateTime,
   getLocale,
@@ -19,7 +20,33 @@ import {
   localizeAttentionMessage,
   severityLabel,
   visibilityLabel,
+  type Locale,
 } from "@/modules/i18n";
+
+function healthStatusLabel(locale: Locale, status: string) {
+  if (locale === "en") {
+    if (status === "HEALTHY") return "Healthy";
+    if (status === "ATTENTION") return "Attention";
+    if (status === "AT_RISK") return "At risk";
+    return status;
+  }
+
+  if (status === "HEALTHY") return "Saudável";
+  if (status === "ATTENTION") return "Atenção";
+  if (status === "AT_RISK") return "Em risco";
+  return status;
+}
+
+function dimensionLabel(locale: Locale, dimension: string) {
+  if (locale === "en") return dimension;
+  const labels: Record<string, string> = {
+    DEVELOPMENT: "Desenvolvimento",
+    REVIEW: "Review",
+    DELIVERY: "Entrega",
+    PLANNING: "Planejamento",
+  };
+  return labels[dimension] ?? dimension;
+}
 
 export default async function DashboardPage() {
   const [user, locale] = await Promise.all([getCurrentUser(), getLocale()]);
@@ -46,40 +73,42 @@ export default async function DashboardPage() {
 
   const repositoryCount = connectedRepositories.length;
 
-  const [[pullRequestMetric], [issueMetric], [workflowMetric], activeAttention] = await Promise.all([
-    db
-      .select({ value: count() })
-      .from(githubPullRequests)
-      .innerJoin(repositories, eq(repositories.id, githubPullRequests.repositoryId))
-      .innerJoin(projects, eq(projects.id, repositories.projectId))
-      .where(eq(projects.userId, user.id)),
-    db
-      .select({ value: count() })
-      .from(githubIssues)
-      .innerJoin(repositories, eq(repositories.id, githubIssues.repositoryId))
-      .innerJoin(projects, eq(projects.id, repositories.projectId))
-      .where(eq(projects.userId, user.id)),
-    db
-      .select({ value: count() })
-      .from(githubWorkflowRuns)
-      .innerJoin(repositories, eq(repositories.id, githubWorkflowRuns.repositoryId))
-      .innerJoin(projects, eq(projects.id, repositories.projectId))
-      .where(eq(projects.userId, user.id)),
-    db
-      .select({
-        id: attentionItems.id,
-        severity: attentionItems.severity,
-        message: attentionItems.message,
-        detectedAt: attentionItems.detectedAt,
-        owner: repositories.owner,
-        name: repositories.name,
-      })
-      .from(attentionItems)
-      .innerJoin(repositories, eq(repositories.id, attentionItems.repositoryId))
-      .innerJoin(projects, eq(projects.id, repositories.projectId))
-      .where(and(eq(projects.userId, user.id), eq(attentionItems.status, "ACTIVE")))
-      .orderBy(desc(attentionItems.detectedAt)),
-  ]);
+  const [[pullRequestMetric], [issueMetric], [workflowMetric], activeAttention, latestHealth] =
+    await Promise.all([
+      db
+        .select({ value: count() })
+        .from(githubPullRequests)
+        .innerJoin(repositories, eq(repositories.id, githubPullRequests.repositoryId))
+        .innerJoin(projects, eq(projects.id, repositories.projectId))
+        .where(eq(projects.userId, user.id)),
+      db
+        .select({ value: count() })
+        .from(githubIssues)
+        .innerJoin(repositories, eq(repositories.id, githubIssues.repositoryId))
+        .innerJoin(projects, eq(projects.id, repositories.projectId))
+        .where(eq(projects.userId, user.id)),
+      db
+        .select({ value: count() })
+        .from(githubWorkflowRuns)
+        .innerJoin(repositories, eq(repositories.id, githubWorkflowRuns.repositoryId))
+        .innerJoin(projects, eq(projects.id, repositories.projectId))
+        .where(eq(projects.userId, user.id)),
+      db
+        .select({
+          id: attentionItems.id,
+          severity: attentionItems.severity,
+          message: attentionItems.message,
+          detectedAt: attentionItems.detectedAt,
+          owner: repositories.owner,
+          name: repositories.name,
+        })
+        .from(attentionItems)
+        .innerJoin(repositories, eq(repositories.id, attentionItems.repositoryId))
+        .innerJoin(projects, eq(projects.id, repositories.projectId))
+        .where(and(eq(projects.userId, user.id), eq(attentionItems.status, "ACTIVE")))
+        .orderBy(desc(attentionItems.detectedAt)),
+      listLatestProjectHealth(user.id),
+    ]);
 
   const pullRequestCount = pullRequestMetric?.value ?? 0;
   const issueCount = issueMetric?.value ?? 0;
@@ -156,6 +185,107 @@ export default async function DashboardPage() {
           </p>
         </article>
       </section>
+
+      {latestHealth.length > 0 ? (
+        <section className="health-section" aria-label={t.projectHealth}>
+          <div className="principle health-heading">
+            <div>
+              <p className="eyebrow">
+                {locale === "pt-BR" ? "SAÚDE DO PROJETO" : "PROJECT HEALTH"}
+              </p>
+              <h2>
+                {locale === "pt-BR"
+                  ? "Entenda por que o projeto está saudável ou em risco."
+                  : "Know why the project is healthy or at risk."}
+              </h2>
+            </div>
+            <p>
+              {locale === "pt-BR"
+                ? "O score é determinístico e explicável. Cada ponto perdido vem de um sinal concreto de engenharia, nunca de uma avaliação opaca de IA."
+                : "The score is deterministic and explainable. Every lost point comes from a concrete engineering signal, never from an opaque AI judgment."}
+            </p>
+          </div>
+
+          <div className="health-project-list">
+            {latestHealth.map((health) => (
+              <article className="health-project-card" key={health.snapshotId}>
+                <header className="health-project-header">
+                  <div>
+                    <span>{health.projectName}</span>
+                    <strong>
+                      {health.overallScore}
+                      <small>{healthStatusLabel(locale, health.status)}</small>
+                    </strong>
+                    <p>
+                      {locale === "pt-BR" ? "Calculado em" : "Calculated at"}:{" "}
+                      {formatDateTime(locale, health.createdAt)}
+                    </p>
+                  </div>
+                  <div className={`health-status health-status-${health.status.toLowerCase()}`}>
+                    {healthStatusLabel(locale, health.status)}
+                  </div>
+                </header>
+
+                <div className="health-dimensions">
+                  <div>
+                    <span>{locale === "pt-BR" ? "Desenvolvimento" : "Development"}</span>
+                    <strong>{health.developmentScore}</strong>
+                  </div>
+                  <div>
+                    <span>Review</span>
+                    <strong>{health.reviewScore}</strong>
+                  </div>
+                  <div>
+                    <span>{locale === "pt-BR" ? "Entrega" : "Delivery"}</span>
+                    <strong>{health.deliveryScore}</strong>
+                  </div>
+                  {health.planningScore !== null ? (
+                    <div>
+                      <span>{locale === "pt-BR" ? "Planejamento" : "Planning"}</span>
+                      <strong>{health.planningScore}</strong>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="health-reasons">
+                  <div className="health-reasons-heading">
+                    <strong>{locale === "pt-BR" ? "Por quê?" : "Why?"}</strong>
+                    <span>
+                      {health.reasons.length === 0
+                        ? locale === "pt-BR"
+                          ? "Nenhuma penalidade ativa"
+                          : "No active penalties"
+                        : locale === "pt-BR"
+                          ? `${health.reasons.length} penalidade${health.reasons.length === 1 ? "" : "s"}`
+                          : `${health.reasons.length} ${health.reasons.length === 1 ? "penalty" : "penalties"}`}
+                    </span>
+                  </div>
+
+                  {health.reasons.length > 0 ? (
+                    <div className="health-reason-list">
+                      {health.reasons.map((reason) => (
+                        <div className="health-reason" key={`${reason.sourceId}:${reason.dimension}`}>
+                          <span className="health-impact">{reason.impact}</span>
+                          <div>
+                            <strong>{dimensionLabel(locale, reason.dimension)}</strong>
+                            <p>{localizeAttentionMessage(locale, reason.message)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="health-clean-copy">
+                      {locale === "pt-BR"
+                        ? "Nenhum sinal ativo está reduzindo o Health Score neste snapshot."
+                        : "No active signal is reducing the Health Score in this snapshot."}
+                    </p>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <section className="principle">
         <div>
