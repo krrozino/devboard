@@ -14,13 +14,15 @@ import {
   type AttentionFinding,
 } from "@/modules/attention/rules";
 
-const RULE_IDS = ["PR_WAITING_REVIEW", "STALE_ISSUE", "WORKFLOW_FAILED"] as const;
+const TIME_RULE_IDS = ["PR_WAITING_REVIEW", "STALE_ISSUE"] as const;
+const RULE_IDS = [...TIME_RULE_IDS, "WORKFLOW_FAILED"] as const;
 
-export async function evaluateRepositoryAttention(
-  repositoryId: string,
-  now = new Date(),
-  relevantWorkflowBranches?: Iterable<string>,
-) {
+type RepositoryContext = {
+  projectId: string;
+  defaultBranch: string;
+};
+
+async function loadRepositoryContext(repositoryId: string): Promise<RepositoryContext> {
   const [repository] = await db
     .select({
       projectId: repositories.projectId,
@@ -31,8 +33,11 @@ export async function evaluateRepositoryAttention(
     .limit(1);
 
   if (!repository) throw new Error("Repository not found for attention evaluation");
+  return repository;
+}
 
-  const [pullRequests, issues, workflowRuns] = await Promise.all([
+async function loadTimeBasedResources(repositoryId: string) {
+  return Promise.all([
     db
       .select({
         githubId: githubPullRequests.githubPullRequestId,
@@ -53,19 +58,14 @@ export async function evaluateRepositoryAttention(
       })
       .from(githubIssues)
       .where(eq(githubIssues.repositoryId, repositoryId)),
-    db
-      .select({
-        githubRunId: githubWorkflowRuns.githubRunId,
-        workflowName: githubWorkflowRuns.workflowName,
-        branch: githubWorkflowRuns.branch,
-        status: githubWorkflowRuns.status,
-        conclusion: githubWorkflowRuns.conclusion,
-        createdAt: githubWorkflowRuns.createdAtGithub,
-      })
-      .from(githubWorkflowRuns)
-      .where(eq(githubWorkflowRuns.repositoryId, repositoryId)),
   ]);
+}
 
+function evaluateTimeBasedResources(
+  pullRequests: Awaited<ReturnType<typeof loadTimeBasedResources>>[0],
+  issues: Awaited<ReturnType<typeof loadTimeBasedResources>>[1],
+  now: Date,
+) {
   const findings: AttentionFinding[] = [];
 
   for (const pullRequest of pullRequests) {
@@ -78,39 +78,43 @@ export async function evaluateRepositoryAttention(
     if (finding) findings.push(finding);
   }
 
-  findings.push(
-    ...evaluateWorkflows({
-      repositoryId,
-      runs: workflowRuns,
-      relevantBranches: relevantWorkflowBranches ?? [repository.defaultBranch],
-    }),
-  );
+  return findings;
+}
 
+async function reconcileRepositoryFindings(params: {
+  repositoryId: string;
+  projectId: string;
+  findings: AttentionFinding[];
+  ruleIds: readonly string[];
+  now: Date;
+}) {
   const desiredKeys = new Set(
-    findings.map((finding) => `${finding.ruleId}:${finding.resourceType}:${finding.resourceId}`),
+    params.findings.map(
+      (finding) => `${finding.ruleId}:${finding.resourceType}:${finding.resourceId}`,
+    ),
   );
 
   await db.transaction(async (tx) => {
-    for (const finding of findings) {
+    for (const finding of params.findings) {
       await tx
         .insert(attentionItems)
         .values({
-          projectId: repository.projectId,
-          repositoryId,
+          projectId: params.projectId,
+          repositoryId: params.repositoryId,
           ruleId: finding.ruleId,
           resourceType: finding.resourceType,
           resourceId: finding.resourceId,
           severity: finding.severity,
           status: "ACTIVE",
           message: finding.message,
-          detectedAt: now,
+          detectedAt: params.now,
           resolvedAt: null,
         })
         .onConflictDoUpdate({
           target: [attentionItems.ruleId, attentionItems.resourceType, attentionItems.resourceId],
           set: {
-            projectId: repository.projectId,
-            repositoryId,
+            projectId: params.projectId,
+            repositoryId: params.repositoryId,
             severity: finding.severity,
             status: "ACTIVE",
             message: finding.message,
@@ -129,9 +133,9 @@ export async function evaluateRepositoryAttention(
       .from(attentionItems)
       .where(
         and(
-          eq(attentionItems.repositoryId, repositoryId),
+          eq(attentionItems.repositoryId, params.repositoryId),
           eq(attentionItems.status, "ACTIVE"),
-          inArray(attentionItems.ruleId, [...RULE_IDS]),
+          inArray(attentionItems.ruleId, [...params.ruleIds]),
         ),
       );
 
@@ -141,9 +145,68 @@ export async function evaluateRepositoryAttention(
 
       await tx
         .update(attentionItems)
-        .set({ status: "RESOLVED", resolvedAt: now })
+        .set({ status: "RESOLVED", resolvedAt: params.now })
         .where(eq(attentionItems.id, item.id));
     }
+  });
+}
+
+export async function evaluateRepositoryTimeAttention(repositoryId: string, now = new Date()) {
+  const repository = await loadRepositoryContext(repositoryId);
+  const [pullRequests, issues] = await loadTimeBasedResources(repositoryId);
+  const findings = evaluateTimeBasedResources(pullRequests, issues, now);
+
+  await reconcileRepositoryFindings({
+    repositoryId,
+    projectId: repository.projectId,
+    findings,
+    ruleIds: TIME_RULE_IDS,
+    now,
+  });
+
+  return {
+    active: findings.length,
+    findings,
+    evaluatedAt: now,
+  };
+}
+
+export async function evaluateRepositoryAttention(
+  repositoryId: string,
+  now = new Date(),
+  relevantWorkflowBranches?: Iterable<string>,
+) {
+  const repository = await loadRepositoryContext(repositoryId);
+  const [[pullRequests, issues], workflowRuns] = await Promise.all([
+    loadTimeBasedResources(repositoryId),
+    db
+      .select({
+        githubRunId: githubWorkflowRuns.githubRunId,
+        workflowName: githubWorkflowRuns.workflowName,
+        branch: githubWorkflowRuns.branch,
+        status: githubWorkflowRuns.status,
+        conclusion: githubWorkflowRuns.conclusion,
+        createdAt: githubWorkflowRuns.createdAtGithub,
+      })
+      .from(githubWorkflowRuns)
+      .where(eq(githubWorkflowRuns.repositoryId, repositoryId)),
+  ]);
+
+  const findings = evaluateTimeBasedResources(pullRequests, issues, now);
+  findings.push(
+    ...evaluateWorkflows({
+      repositoryId,
+      runs: workflowRuns,
+      relevantBranches: relevantWorkflowBranches ?? [repository.defaultBranch],
+    }),
+  );
+
+  await reconcileRepositoryFindings({
+    repositoryId,
+    projectId: repository.projectId,
+    findings,
+    ruleIds: RULE_IDS,
+    now,
   });
 
   return {
