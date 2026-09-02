@@ -1,7 +1,14 @@
-import { eq } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
-import { githubAppConfigurations, projects, repositories } from "@/db/schema";
+import {
+  githubAppConfigurations,
+  githubIssues,
+  githubPullRequests,
+  githubWorkflowRuns,
+  projects,
+  repositories,
+} from "@/db/schema";
 import { getCurrentUser } from "@/modules/auth/current-user";
 
 export default async function DashboardPage() {
@@ -20,12 +27,39 @@ export default async function DashboardPage() {
       name: repositories.name,
       visibility: repositories.visibility,
       defaultBranch: repositories.defaultBranch,
+      lastSyncedAt: repositories.lastSyncedAt,
     })
     .from(repositories)
     .innerJoin(projects, eq(projects.id, repositories.projectId))
     .where(eq(projects.userId, user.id));
 
   const repositoryCount = connectedRepositories.length;
+
+  const [[pullRequestMetric], [issueMetric], [workflowMetric]] = await Promise.all([
+    db
+      .select({ value: count() })
+      .from(githubPullRequests)
+      .innerJoin(repositories, eq(repositories.id, githubPullRequests.repositoryId))
+      .innerJoin(projects, eq(projects.id, repositories.projectId))
+      .where(eq(projects.userId, user.id)),
+    db
+      .select({ value: count() })
+      .from(githubIssues)
+      .innerJoin(repositories, eq(repositories.id, githubIssues.repositoryId))
+      .innerJoin(projects, eq(projects.id, repositories.projectId))
+      .where(eq(projects.userId, user.id)),
+    db
+      .select({ value: count() })
+      .from(githubWorkflowRuns)
+      .innerJoin(repositories, eq(repositories.id, githubWorkflowRuns.repositoryId))
+      .innerJoin(projects, eq(projects.id, repositories.projectId))
+      .where(eq(projects.userId, user.id)),
+  ]);
+
+  const pullRequestCount = pullRequestMetric?.value ?? 0;
+  const issueCount = issueMetric?.value ?? 0;
+  const workflowRunCount = workflowMetric?.value ?? 0;
+  const hasSyncedData = connectedRepositories.some((repository) => repository.lastSyncedAt);
 
   return (
     <main className="shell">
@@ -45,12 +79,14 @@ export default async function DashboardPage() {
       </nav>
 
       <section className="hero dashboard-hero">
-        <p className="eyebrow">GITHUB IDENTITY CONNECTED</p>
+        <p className="eyebrow">GITHUB CONNECTION ACTIVE</p>
         <h1>Welcome, {user.name ?? user.username}.</h1>
         <p className="hero-copy">
-          {repositoryCount > 0
-            ? "DevBoard can now observe real repositories. The next slice will ingest pull requests, issues and workflow activity."
-            : "Your DevBoard account is linked to GitHub. Connect the DevBoard GitHub App to start observing real repositories."}
+          {hasSyncedData
+            ? "DevBoard is now reading normalized engineering signals from your GitHub repositories."
+            : repositoryCount > 0
+              ? "Your first repository is connected. Run the initial sync to import pull requests, issues, reviews and workflows."
+              : "Your DevBoard account is linked to GitHub. Connect the DevBoard GitHub App to start observing real repositories."}
         </p>
         <div className="hero-actions">
           {appConfiguration ? (
@@ -70,33 +106,33 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className="signal-grid" aria-label="DevBoard account status">
-        <article className="signal-card">
-          <span>Identity</span>
-          <strong className="signal-word">Connected</strong>
-          <p>GitHub user #{user.githubId}</p>
-        </article>
+      <section className="signal-grid" aria-label="DevBoard repository signals">
         <article className="signal-card">
           <span>Repositories</span>
           <strong>{repositoryCount}</strong>
           <p>{repositoryCount > 0 ? "Observed by DevBoard" : "No repository connected yet"}</p>
         </article>
         <article className="signal-card">
-          <span>Needs attention</span>
-          <strong>--</strong>
-          <p>{repositoryCount > 0 ? "Attention Engine is next" : "Waiting for repository data"}</p>
+          <span>Pull requests</span>
+          <strong>{pullRequestCount}</strong>
+          <p>{hasSyncedData ? "Normalized from GitHub" : "Waiting for initial sync"}</p>
+        </article>
+        <article className="signal-card">
+          <span>Issues</span>
+          <strong>{issueCount}</strong>
+          <p>{hasSyncedData ? `${workflowRunCount} workflow runs imported` : "Waiting for initial sync"}</p>
         </article>
       </section>
 
       <section className="principle">
         <div>
-          <p className="eyebrow">NEXT VERTICAL SLICE</p>
-          <h2>{repositoryCount > 0 ? "Ingest real engineering signals." : "Connect a real repository."}</h2>
+          <p className="eyebrow">{hasSyncedData ? "NEXT VERTICAL SLICE" : "INITIAL SYNC"}</p>
+          <h2>{hasSyncedData ? "Turn signals into attention." : "Import real engineering signals."}</h2>
         </div>
         <p>
-          {repositoryCount > 0
-            ? "The repository connection is ready. Next, DevBoard will normalize pull requests, issues, reviews and workflow runs into activity and attention signals."
-            : "The GitHub App uses read-only repository permissions. You choose which repositories DevBoard can access during installation."}
+          {hasSyncedData
+            ? "The data layer is live. Next, deterministic attention rules will decide which pull requests, issues and workflows actually need your attention."
+            : "Sync uses a short-lived GitHub App installation token. DevBoard never stores that token in PostgreSQL."}
         </p>
       </section>
 
@@ -109,6 +145,15 @@ export default async function DashboardPage() {
                 {repository.owner}/{repository.name}
               </strong>
               <p>Default branch: {repository.defaultBranch}</p>
+              <p>
+                Last sync: {repository.lastSyncedAt ? repository.lastSyncedAt.toISOString() : "never"}
+              </p>
+              <form action="/api/github/sync" method="post">
+                <input name="repositoryId" type="hidden" value={repository.id} />
+                <button className="secondary" type="submit">
+                  {repository.lastSyncedAt ? "Sync again" : "Sync now"}
+                </button>
+              </form>
             </article>
           ))}
         </section>

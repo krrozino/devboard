@@ -14,7 +14,11 @@ export async function GET() {
         to_regclass('public.attention_items') as attention_items_table,
         to_regclass('public.health_snapshots') as health_snapshots_table,
         to_regclass('public.github_app_configurations') as github_app_configurations_table,
-        to_regclass('public.github_installations') as github_installations_table
+        to_regclass('public.github_installations') as github_installations_table,
+        to_regclass('public.github_issues') as github_issues_table,
+        to_regclass('public.github_pull_requests') as github_pull_requests_table,
+        to_regclass('public.github_reviews') as github_reviews_table,
+        to_regclass('public.github_workflow_runs') as github_workflow_runs_table
     `);
 
     const row = result.rows[0] as Record<string, unknown> | undefined;
@@ -25,7 +29,11 @@ export async function GET() {
         row?.attention_items_table &&
         row?.health_snapshots_table &&
         row?.github_app_configurations_table &&
-        row?.github_installations_table,
+        row?.github_installations_table &&
+        row?.github_issues_table &&
+        row?.github_pull_requests_table &&
+        row?.github_reviews_table &&
+        row?.github_workflow_runs_table,
     );
 
     return Response.json({
