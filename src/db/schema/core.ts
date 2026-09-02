@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   pgEnum,
@@ -115,6 +116,91 @@ export const repositories = pgTable(
     uniqueIndex("repositories_github_repository_id_uidx").on(table.githubRepositoryId),
     index("repositories_project_id_idx").on(table.projectId),
     index("repositories_installation_id_idx").on(table.installationId),
+  ],
+);
+
+export const githubIssues = pgTable(
+  "github_issues",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    repositoryId: uuid("repository_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    githubIssueId: text("github_issue_id").notNull(),
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    state: text("state").notNull(),
+    authorGithubId: text("author_github_id"),
+    createdAtGithub: timestamp("created_at_github", { withTimezone: true }).notNull(),
+    updatedAtGithub: timestamp("updated_at_github", { withTimezone: true }).notNull(),
+    closedAtGithub: timestamp("closed_at_github", { withTimezone: true }),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("github_issues_external_id_uidx").on(table.githubIssueId),
+    index("github_issues_repository_state_idx").on(table.repositoryId, table.state),
+  ],
+);
+
+export const githubPullRequests = pgTable(
+  "github_pull_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    repositoryId: uuid("repository_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    githubPullRequestId: text("github_pull_request_id").notNull(),
+    number: integer("number").notNull(),
+    title: text("title").notNull(),
+    state: text("state").notNull(),
+    draft: boolean("draft").default(false).notNull(),
+    authorGithubId: text("author_github_id"),
+    createdAtGithub: timestamp("created_at_github", { withTimezone: true }).notNull(),
+    updatedAtGithub: timestamp("updated_at_github", { withTimezone: true }).notNull(),
+    closedAtGithub: timestamp("closed_at_github", { withTimezone: true }),
+    mergedAtGithub: timestamp("merged_at_github", { withTimezone: true }),
+    firstReviewAt: timestamp("first_review_at", { withTimezone: true }),
+    lastReviewAt: timestamp("last_review_at", { withTimezone: true }),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull(),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("github_pull_requests_external_id_uidx").on(table.githubPullRequestId),
+    index("github_pull_requests_repository_state_idx").on(table.repositoryId, table.state),
+  ],
+);
+
+export const githubReviews = pgTable(
+  "github_reviews",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    pullRequestId: uuid("pull_request_id").notNull().references(() => githubPullRequests.id, { onDelete: "cascade" }),
+    githubReviewId: text("github_review_id").notNull(),
+    reviewerGithubId: text("reviewer_github_id"),
+    state: text("state").notNull(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("github_reviews_external_id_uidx").on(table.githubReviewId),
+    index("github_reviews_pull_request_idx").on(table.pullRequestId),
+  ],
+);
+
+export const githubWorkflowRuns = pgTable(
+  "github_workflow_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    repositoryId: uuid("repository_id").notNull().references(() => repositories.id, { onDelete: "cascade" }),
+    githubRunId: text("github_run_id").notNull(),
+    workflowName: text("workflow_name").notNull(),
+    branch: text("branch"),
+    status: text("status").notNull(),
+    conclusion: text("conclusion"),
+    createdAtGithub: timestamp("created_at_github", { withTimezone: true }).notNull(),
+    startedAtGithub: timestamp("started_at_github", { withTimezone: true }),
+    completedAtGithub: timestamp("completed_at_github", { withTimezone: true }),
+    syncedAt: timestamp("synced_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("github_workflow_runs_external_id_uidx").on(table.githubRunId),
+    index("github_workflow_runs_repository_status_idx").on(table.repositoryId, table.status),
   ],
 );
 
