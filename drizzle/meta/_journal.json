@@ -29,6 +29,13 @@
       "when": 1788381903936,
       "tag": "0003_stiff_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788384182618,
+      "tag": "0004_wise_maelstrom",
+      "breakpoints": true
     }
   ]
 }
