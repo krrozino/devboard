@@ -15,6 +15,13 @@
       "when": 1788364109611,
       "tag": "0001_sturdy_gorilla_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788365208176,
+      "tag": "0002_green_valkyrie",
+      "breakpoints": true
     }
   ]
 }
