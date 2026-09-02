@@ -6,6 +6,7 @@ import {
   createPkceChallenge,
   createPkceVerifier,
   OAUTH_COOKIE_MAX_AGE_SECONDS,
+  OAUTH_PURPOSE_COOKIE,
   OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE,
 } from "@/modules/auth/session";
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
 
     response.cookies.set(OAUTH_STATE_COOKIE, state, cookieOptions);
     response.cookies.set(OAUTH_VERIFIER_COOKIE, verifier, cookieOptions);
+    response.cookies.set(OAUTH_PURPOSE_COOKIE, "identity", cookieOptions);
     return response;
   } catch {
     return NextResponse.redirect(new URL("/?auth_error=config", request.url));
