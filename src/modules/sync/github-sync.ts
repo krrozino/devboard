@@ -57,6 +57,7 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
       projectId: repositories.projectId,
       owner: repositories.owner,
       name: repositories.name,
+      defaultBranch: repositories.defaultBranch,
       installationId: githubInstallations.githubInstallationId,
       appId: githubAppConfigurations.githubAppId,
       privateKeyEncrypted: githubAppConfigurations.privateKeyEncrypted,
@@ -95,6 +96,13 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
     connection.name,
     pullRequests.map((pullRequest) => pullRequest.number),
   );
+
+  const relevantWorkflowBranches = new Set<string>([connection.defaultBranch]);
+  for (const pullRequest of pullRequests) {
+    if (pullRequest.state === "open" && pullRequest.head?.ref) {
+      relevantWorkflowBranches.add(pullRequest.head.ref);
+    }
+  }
 
   const now = new Date();
   let reviewCount = 0;
@@ -210,7 +218,11 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
       .where(eq(repositories.id, connection.repositoryId));
   });
 
-  const attention = await evaluateRepositoryAttention(connection.repositoryId, now);
+  const attention = await evaluateRepositoryAttention(
+    connection.repositoryId,
+    now,
+    relevantWorkflowBranches,
+  );
   const health = await recalculateProjectHealth(connection.projectId, now);
 
   return {
