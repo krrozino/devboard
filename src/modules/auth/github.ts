@@ -23,23 +23,25 @@ export function buildGithubAuthorizeUrl({
   callbackUrl,
   state,
   codeChallenge,
+  scopes = ["read:user", "user:email"],
 }: {
   clientId: string;
   callbackUrl: string;
   state: string;
   codeChallenge: string;
+  scopes?: string[];
 }) {
   const url = new URL("https://github.com/login/oauth/authorize");
   url.searchParams.set("client_id", clientId);
   url.searchParams.set("redirect_uri", callbackUrl);
-  url.searchParams.set("scope", "read:user user:email");
+  url.searchParams.set("scope", scopes.join(" "));
   url.searchParams.set("state", state);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
   return url;
 }
 
-export async function exchangeGithubCode({
+export async function exchangeGithubCodeWithMetadata({
   config,
   code,
   codeVerifier,
@@ -70,6 +72,8 @@ export async function exchangeGithubCode({
 
   const payload = (await response.json()) as {
     access_token?: string;
+    scope?: string;
+    token_type?: string;
     error?: string;
   };
 
@@ -77,7 +81,20 @@ export async function exchangeGithubCode({
     throw new Error(payload.error ?? "GitHub did not return an access token");
   }
 
-  return payload.access_token;
+  return {
+    accessToken: payload.access_token,
+    scope: payload.scope ?? "",
+    tokenType: payload.token_type ?? "bearer",
+  };
+}
+
+export async function exchangeGithubCode(params: {
+  config: GithubOAuthConfig;
+  code: string;
+  codeVerifier: string;
+}) {
+  const result = await exchangeGithubCodeWithMetadata(params);
+  return result.accessToken;
 }
 
 async function githubApi<T>(path: string, accessToken: string) {
