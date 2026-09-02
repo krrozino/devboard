@@ -1,4 +1,3 @@
-import { eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -76,15 +75,7 @@ export async function GET(request: NextRequest) {
       })
       .returning({ id: users.id });
 
-    if (!user) {
-      const [existingUser] = await db
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.githubId, identity.githubId))
-        .limit(1);
-      if (!existingUser) throw new Error("Unable to persist GitHub user");
-      user.id = existingUser.id;
-    }
+    if (!user) throw new Error("Unable to persist GitHub user");
 
     const response = NextResponse.redirect(new URL("/dashboard", appOrigin));
     response.cookies.set(
