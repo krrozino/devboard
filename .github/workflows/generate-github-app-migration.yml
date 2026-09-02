@@ -29,6 +29,8 @@ jobs:
 
       - name: Generate migration
         run: npm run db:generate
+        env:
+          DATABASE_URL: postgresql://devboard:devboard@localhost:5432/devboard
 
       - name: Commit generated migration
         run: |
