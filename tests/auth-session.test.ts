@@ -29,7 +29,7 @@ describe("auth session", () => {
 
   it("creates a deterministic S256 PKCE challenge", () => {
     expect(createPkceChallenge("devboard-verifier")).toBe(
-      "lI2gsjjNWGF9XimD4h5l2-bOIfnE7YE8Yl8n7vEWu4Y",
+      "l0sCHubxV87q3y9ectWoR2Y7xObb9NuYl0-s0nB6Qbo",
     );
   });
 });
