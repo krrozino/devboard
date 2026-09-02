@@ -181,4 +181,61 @@ describe("Attention rules", () => {
       }),
     ).toEqual([]);
   });
+
+  it("ignores failures from obsolete branches outside the current workflow context", () => {
+    expect(
+      evaluateWorkflows({
+        repositoryId: "repo-1",
+        relevantBranches: ["main"],
+        runs: [
+          {
+            githubRunId: "old-1",
+            workflowName: "CI",
+            branch: "feat/obsolete",
+            status: "completed",
+            conclusion: "failure",
+            createdAt: hoursAgo(1),
+          },
+        ],
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps failures on the default branch and branches with open pull requests", () => {
+    const findings = evaluateWorkflows({
+      repositoryId: "repo-1",
+      relevantBranches: ["main", "feat/live-pr"],
+      runs: [
+        {
+          githubRunId: "main-1",
+          workflowName: "CI",
+          branch: "main",
+          status: "completed",
+          conclusion: "failure",
+          createdAt: hoursAgo(1),
+        },
+        {
+          githubRunId: "pr-1",
+          workflowName: "CI",
+          branch: "feat/live-pr",
+          status: "completed",
+          conclusion: "failure",
+          createdAt: hoursAgo(1),
+        },
+        {
+          githubRunId: "old-1",
+          workflowName: "CI",
+          branch: "feat/obsolete",
+          status: "completed",
+          conclusion: "failure",
+          createdAt: hoursAgo(1),
+        },
+      ],
+    });
+
+    expect(findings).toHaveLength(2);
+    expect(findings.map((finding) => finding.message).join(" ")).toContain("on main");
+    expect(findings.map((finding) => finding.message).join(" ")).toContain("on feat/live-pr");
+    expect(findings.map((finding) => finding.message).join(" ")).not.toContain("feat/obsolete");
+  });
 });

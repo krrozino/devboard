@@ -73,10 +73,16 @@ const FAILURE_CONCLUSIONS = new Set(["failure", "timed_out", "cancelled", "start
 export function evaluateWorkflows(params: {
   repositoryId: string;
   runs: WorkflowRunForAttention[];
+  relevantBranches?: Iterable<string>;
 }): AttentionFinding[] {
+  const relevantBranches = params.relevantBranches
+    ? new Set(params.relevantBranches)
+    : null;
   const groups = new Map<string, WorkflowRunForAttention[]>();
 
   for (const run of params.runs) {
+    if (relevantBranches && (!run.branch || !relevantBranches.has(run.branch))) continue;
+
     const key = `${run.workflowName}::${run.branch ?? ""}`;
     const group = groups.get(key) ?? [];
     group.push(run);
@@ -88,13 +94,22 @@ export function evaluateWorkflows(params: {
   for (const [key, runs] of groups) {
     const ordered = [...runs].sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
     const latest = ordered[0];
-    if (!latest || latest.status !== "completed" || !latest.conclusion || !FAILURE_CONCLUSIONS.has(latest.conclusion)) {
+    if (
+      !latest ||
+      latest.status !== "completed" ||
+      !latest.conclusion ||
+      !FAILURE_CONCLUSIONS.has(latest.conclusion)
+    ) {
       continue;
     }
 
     let consecutiveFailures = 0;
     for (const run of ordered) {
-      if (run.status === "completed" && run.conclusion && FAILURE_CONCLUSIONS.has(run.conclusion)) {
+      if (
+        run.status === "completed" &&
+        run.conclusion &&
+        FAILURE_CONCLUSIONS.has(run.conclusion)
+      ) {
         consecutiveFailures += 1;
       } else {
         break;

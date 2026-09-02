@@ -54,6 +54,7 @@ export type GithubPullRequestResource = {
   state: string;
   draft: boolean | null;
   user: { id: number } | null;
+  head: { ref: string } | null;
   created_at: string;
   updated_at: string;
   closed_at: string | null;
