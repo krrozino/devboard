@@ -95,6 +95,9 @@ export default async function DashboardPage() {
           <span>DevBoard</span>
         </div>
         <div className="account-actions">
+          <a className="secondary" href="/planning">
+            {locale === "pt-BR" ? "Planejamento" : "Planning"}
+          </a>
           <LocaleSwitcher locale={locale} returnTo="/dashboard" />
           <span className="status-pill">@{user.username}</span>
           <form action="/api/auth/logout" method="post">

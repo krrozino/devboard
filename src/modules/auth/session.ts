@@ -8,6 +8,7 @@ import {
 export const SESSION_COOKIE = "devboard_session";
 export const OAUTH_STATE_COOKIE = "devboard_oauth_state";
 export const OAUTH_VERIFIER_COOKIE = "devboard_oauth_verifier";
+export const OAUTH_PURPOSE_COOKIE = "devboard_oauth_purpose";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 export const OAUTH_COOKIE_MAX_AGE_SECONDS = 60 * 10;
 
