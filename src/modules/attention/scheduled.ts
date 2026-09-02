@@ -15,10 +15,6 @@ export type ScheduledAttentionRun = {
   completedAt: Date;
 };
 
-export function isCronRequestAuthorized(authorization: string | null, secret: string | undefined) {
-  return Boolean(secret && authorization === `Bearer ${secret}`);
-}
-
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "unknown error";
 }
