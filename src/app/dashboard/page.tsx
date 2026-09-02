@@ -1,7 +1,8 @@
-import { count, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { db } from "@/db";
 import {
+  attentionItems,
   githubAppConfigurations,
   githubIssues,
   githubPullRequests,
@@ -35,7 +36,7 @@ export default async function DashboardPage() {
 
   const repositoryCount = connectedRepositories.length;
 
-  const [[pullRequestMetric], [issueMetric], [workflowMetric]] = await Promise.all([
+  const [[pullRequestMetric], [issueMetric], [workflowMetric], activeAttention] = await Promise.all([
     db
       .select({ value: count() })
       .from(githubPullRequests)
@@ -54,11 +55,26 @@ export default async function DashboardPage() {
       .innerJoin(repositories, eq(repositories.id, githubWorkflowRuns.repositoryId))
       .innerJoin(projects, eq(projects.id, repositories.projectId))
       .where(eq(projects.userId, user.id)),
+    db
+      .select({
+        id: attentionItems.id,
+        severity: attentionItems.severity,
+        message: attentionItems.message,
+        detectedAt: attentionItems.detectedAt,
+        owner: repositories.owner,
+        name: repositories.name,
+      })
+      .from(attentionItems)
+      .innerJoin(repositories, eq(repositories.id, attentionItems.repositoryId))
+      .innerJoin(projects, eq(projects.id, repositories.projectId))
+      .where(and(eq(projects.userId, user.id), eq(attentionItems.status, "ACTIVE")))
+      .orderBy(desc(attentionItems.detectedAt)),
   ]);
 
   const pullRequestCount = pullRequestMetric?.value ?? 0;
   const issueCount = issueMetric?.value ?? 0;
   const workflowRunCount = workflowMetric?.value ?? 0;
+  const attentionCount = activeAttention.length;
   const hasSyncedData = connectedRepositories.some((repository) => repository.lastSyncedAt);
 
   return (
@@ -83,7 +99,7 @@ export default async function DashboardPage() {
         <h1>Welcome, {user.name ?? user.username}.</h1>
         <p className="hero-copy">
           {hasSyncedData
-            ? "DevBoard is now reading normalized engineering signals from your GitHub repositories."
+            ? "DevBoard is reading normalized engineering signals and converting them into deterministic attention."
             : repositoryCount > 0
               ? "Your first repository is connected. Run the initial sync to import pull requests, issues, reviews and workflows."
               : "Your DevBoard account is linked to GitHub. Connect the DevBoard GitHub App to start observing real repositories."}
@@ -118,23 +134,47 @@ export default async function DashboardPage() {
           <p>{hasSyncedData ? "Normalized from GitHub" : "Waiting for initial sync"}</p>
         </article>
         <article className="signal-card">
-          <span>Issues</span>
-          <strong>{issueCount}</strong>
-          <p>{hasSyncedData ? `${workflowRunCount} workflow runs imported` : "Waiting for initial sync"}</p>
+          <span>Needs attention</span>
+          <strong>{hasSyncedData ? attentionCount : "--"}</strong>
+          <p>
+            {hasSyncedData
+              ? `${issueCount} issues · ${workflowRunCount} workflow runs observed`
+              : "Waiting for initial sync"}
+          </p>
         </article>
       </section>
 
       <section className="principle">
         <div>
-          <p className="eyebrow">{hasSyncedData ? "NEXT VERTICAL SLICE" : "INITIAL SYNC"}</p>
-          <h2>{hasSyncedData ? "Turn signals into attention." : "Import real engineering signals."}</h2>
+          <p className="eyebrow">{hasSyncedData ? "ATTENTION ENGINE" : "INITIAL SYNC"}</p>
+          <h2>{hasSyncedData ? "Know what needs attention." : "Import real engineering signals."}</h2>
         </div>
         <p>
           {hasSyncedData
-            ? "The data layer is live. Next, deterministic attention rules will decide which pull requests, issues and workflows actually need your attention."
+            ? "DevBoard currently evaluates explainable rules for pull requests waiting on review, stale issues and failed workflows."
             : "Sync uses a short-lived GitHub App installation token. DevBoard never stores that token in PostgreSQL."}
         </p>
       </section>
+
+      {hasSyncedData ? (
+        <section className="repository-list" aria-label="Active attention items">
+          {activeAttention.length > 0 ? (
+            activeAttention.map((item) => (
+              <article className="signal-card" key={item.id}>
+                <span>{item.severity} · {item.owner}/{item.name}</span>
+                <strong className="signal-word">{item.message}</strong>
+                <p>Detected: {item.detectedAt.toISOString()}</p>
+              </article>
+            ))
+          ) : (
+            <article className="signal-card">
+              <span>Attention</span>
+              <strong className="signal-word">No active signals.</strong>
+              <p>The current deterministic rules did not find anything requiring attention.</p>
+            </article>
+          )}
+        </section>
+      ) : null}
 
       {connectedRepositories.length > 0 ? (
         <section className="repository-list" aria-label="Connected repositories">
