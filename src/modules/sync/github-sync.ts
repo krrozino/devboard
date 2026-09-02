@@ -10,6 +10,7 @@ import {
   projects,
   repositories,
 } from "@/db/schema";
+import { evaluateRepositoryAttention } from "@/modules/attention/engine";
 import { createInstallationToken } from "@/modules/github/app-api";
 import { decryptCredential } from "@/modules/github/credentials";
 import {
@@ -207,11 +208,14 @@ export async function syncGithubRepository(repositoryId: string, userId: string)
       .where(eq(repositories.id, connection.repositoryId));
   });
 
+  const attention = await evaluateRepositoryAttention(connection.repositoryId, now);
+
   return {
     issues: issues.length,
     pullRequests: pullRequests.length,
     reviews: reviewCount,
     workflowRuns: workflowRuns.length,
+    attention: attention.active,
     syncedAt: now,
   };
 }
